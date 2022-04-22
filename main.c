@@ -34,46 +34,29 @@ void myWriteByte(char ch)
 {
   // Use write() to send 1 byte to stdout (file descriptor 1)
   write(fd_write, &ch, 1);
-  // num_write_syscalls++;
+  num_write_syscalls++;
 
 }
 
 void myWriteBufSetup(int n)
 {
   write_buf_size = n;
-
-  for (int i=0; i < n; i++) {
-    write_buf[i] = '\0';
-  }
-
-  wp = malloc(n * sizeof(char));
+  wp = write_buf;
 
 }
 
 void myWriteToBuf(char ch)
 {
   // Write a char into the buffer
-  int i = 0;
-
-  for (i = 0; i < write_buf_size; i++) {
-    if (write_buf[i] == '\0') {
-      write_buf[i] = ch;
-      break;
-    }
+  *wp = ch;
+  wp++;
+  // If buffer is now full
+  // Use write() to send full buffer to stdout (file descriptor 1)
+  if ((wp - write_buf) == write_buf_size) {
+    write(fd_write, write_buf, write_buf_size); //? wp?
+    wp = write_buf;
+    num_write_syscalls++;
   }
-
-
-  if (strlen(write_buf) == write_buf_size) {
-      // If buffer is now full
-      // Use write() to send full buffer to stdout (file descriptor 1)
-
-        int num = write(fd_write, write_buf, write_buf_size);
-        if (num < write_buf_size) {
-          return;
-        }
-        num_write_syscalls++;
-  }
-
 
 }
 
@@ -91,18 +74,20 @@ int myReadByte(void)
   char* byte = (char*) malloc(sizeof(char));
   // Use read() to read 1 byte from file descriptor fd_read
   // Use returned value to handle error and end of file conditions
-  read_count = read(fd_read, byte, 1);
+  int val = read(fd_read, byte, 1);
+  if (val == 0) {
+    return -1;
+  }
   num_read_syscalls++;
-  return read_count;
+  return (int) *byte;
 
 
 }
 
 void myReadBufSetup(int n)
 {
-  for (int i = 0; i < n+1; i++) {
-    read_buf[i] = '\0';
-  }
+  read_buf_size = n;
+  read_count = 0;
 
 }
 
@@ -110,16 +95,22 @@ char myReadBuf()
 {
   if(read_count <= 0)
   {
-  // System call to read enough to fill buffer or reach end of file,
-  // whichever comes first.
-  // read() returns the number of bytes read
-    return (char) read_count; 
-
+    // System call to read enough to fill buffer or reach end of file,
+    // whichever comes first.
+    read_count = read(fd_read, read_buf, read_buf_size);
+    rp = read_buf;
+    num_read_syscalls++;
+    if (read_count == 0) {
+      return -1;
+    }
+    // read() returns the number of bytes read
+      
   }
   // Read one byte from the buffer and return it
-  read_count = read(fd_read, read_buf, 1);
-  num_read_syscalls++;
-  return (char) read_count; 
+  char val = *rp;
+  rp++;
+  read_count--;
+  return val; 
 
 
 }
@@ -265,10 +256,10 @@ int main()
           }
 // Uncomment these lines to print bytes read to stdout, but doing so
 // includes a non-read operation in the timing of myReadBuf() execution.
-//          else
-//          {
-//            printf("%c", ReadFromBuf);
-//          }
+          else
+          {
+            printf("%c", ReadFromBuf);
+          }
         }
         end = clock();
 // Timing of buffered read and counting of read() syscalls ends here
